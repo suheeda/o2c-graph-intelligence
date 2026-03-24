@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAP O2C — Graph Intelligence</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #090b10;
+  --bg2: #0f1319;
+  --bg3: #151b24;
+  --border: #1c2333;
+  --border2: #263045;
+  --text: #b8c8e0;
+  --text-dim: #4e6080;
+  --text-hi: #deeaff;
+  --accent: #3b78ff;
+  --accent-bg: rgba(59,120,255,.12);
+  --green: #00c896;
+  --orange: #ff6830;
+  --yellow: #ffb020;
+  --purple: #9b5fff;
+  --red: #ff5c7a;
+  --cyan: #19c2ff;
+  --mono: 'Space Mono', monospace;
+  --sans: 'DM Sans', sans-serif;
+  --nc-cust: #3b78ff;
+  --nc-so: #9b5fff;
+  --nc-del: #00c896;
+  --nc-bill: #ff6830;
+  --nc-pay: #ffb020;
+  --nc-prod: #19c2ff;
+  --nc-je: #ff5c7a;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+header {
+  height: 52px;
+  flex-shrink: 0;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  z-index: 20;
+}
+.logo {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--mono); font-size: 12px;
+  letter-spacing: .08em; color: var(--text-hi);
+}
+.pip {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  animation: blink 2.4s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+.stats { display: flex; gap: 20px; }
+.stat { text-align: right; }
+.stat-n { font-family: var(--mono); font-size: 13px; color: var(--green); line-height: 1; }
+.stat-l { font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .1em; margin-top: 2px; }
+.workspace { display: flex; flex: 1; overflow: hidden; }
+.graph-wrap { flex: 1; position: relative; background: var(--bg); overflow: hidden; }
+#cy { width: 100%; height: 100%; }
+.graph-ctrl {
+  position: absolute; top: 14px; left: 14px;
+  display: flex; flex-direction: column; gap: 5px; z-index: 5;
+}
+.cbtn {
+  width: 32px; height: 32px;
+  background: var(--bg2); border: 1px solid var(--border2); border-radius: 6px;
+  color: var(--text-dim); font-size: 15px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s;
+}
+.cbtn:hover { border-color: var(--accent); color: var(--accent); }
+.legend {
+  position: absolute; bottom: 14px; left: 14px;
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 14px; z-index: 5;
+}
+.leg-hd { font-family: var(--mono); font-size: 8px; text-transform: uppercase; letter-spacing: .12em; color: var(--text-dim); margin-bottom: 7px; }
+.leg-row { display: flex; align-items: center; gap: 7px; font-size: 11px; margin-bottom: 4px; }
+.leg-row:last-child { margin-bottom: 0; }
+.ldot { width: 9px; height: 9px; border-radius: 50%; }
+
+.node-info {
+  position: absolute; top: 14px; right: 14px;
+  width: 275px;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: 10px; padding: 14px; z-index: 10;
+  display: none; animation: popIn .18s ease;
+}
+.node-info.show { display: block; }
+@keyframes popIn { from{opacity:0;transform:translateY(-5px)} to{opacity:1;transform:translateY(0)} }
+.ni-x {
+  position: absolute; top: 9px; right: 11px;
+  background: none; border: none;
+  color: var(--text-dim); font-size: 15px; cursor: pointer;
+}
+.ni-x:hover { color: var(--text); }
+.ni-type { font-family: var(--mono); font-size: 8px; text-transform: uppercase; letter-spacing: .12em; color: var(--text-dim); margin-bottom: 3px; }
+.ni-name { font-size: 13px; font-weight: 600; color: var(--text-hi); margin-bottom: 10px; word-break: break-all; }
+.ni-row {
+  display: flex; justify-content: space-between; gap: 8px;
+  padding: 3px 0; border-bottom: 1px solid var(--border); font-size: 11px;
+}
+.ni-row:last-child { border-bottom: none; }
+.ni-k { color: var(--text-dim); flex-shrink: 0; }
+.ni-v { color: var(--text-hi); text-align: right; word-break: break-all; }
+
+.chat-panel {
+  width: 400px; flex-shrink: 0;
+  display: flex; flex-direction: column;
+  background: var(--bg2); border-left: 1px solid var(--border);
+}
+.chat-hd {
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.chat-hd-t { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-hi); }
+.chat-hd-s { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.chips { padding: 10px 14px 0; display: flex; flex-wrap: wrap; gap: 5px; flex-shrink: 0; }
+.chip {
+  background: var(--bg3); border: 1px solid var(--border2);
+  border-radius: 20px; padding: 4px 10px;
+  font-size: 10px; color: var(--text-dim); cursor: pointer; transition: all .15s;
+}
+.chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+
+.msgs {
+  flex: 1; overflow-y: auto; padding: 14px;
+  display: flex; flex-direction: column; gap: 12px;
+  scrollbar-width: thin; scrollbar-color: var(--border2) transparent;
+}
+.msg { display: flex; flex-direction: column; gap: 3px; animation: slideUp .2s ease; }
+@keyframes slideUp { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+.msg-role { font-family: var(--mono); font-size: 8px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-dim); }
+.msg.user .bubble {
+  background: var(--accent-bg); border: 1px solid rgba(59,120,255,.28);
+  border-radius: 2px 10px 10px 10px;
+  padding: 9px 13px; font-size: 13px; color: var(--text-hi);
+}
+.msg.bot .bubble {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 10px 10px 10px 2px;
+  padding: 11px 13px; font-size: 12px; color: var(--text); line-height: 1.65;
+}
+.msg.bot.err .bubble { border-color: rgba(255,104,48,.4); background: rgba(255,104,48,.07); color: var(--orange); }
+
+.sql-wrap { margin-top: 9px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.sql-hd {
+  padding: 3px 9px; background: rgba(255,255,255,.02);
+  border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center;
+  font-family: var(--mono); font-size: 8px; text-transform: uppercase;
+  letter-spacing: .1em; color: var(--text-dim);
+}
+.sql-copy { background: none; border: none; color: var(--text-dim); font-family: var(--mono); font-size: 8px; text-transform: uppercase; letter-spacing: .05em; cursor: pointer; }
+.sql-copy:hover { color: var(--green); }
+.sql-body {
+  padding: 8px 10px; font-family: var(--mono); font-size: 10px;
+  color: var(--green); white-space: pre-wrap; word-break: break-all;
+  line-height: 1.5; max-height: 130px; overflow-y: auto;
+}
+
+.tbl-wrap {
+  margin-top: 9px; border: 1px solid var(--border); border-radius: 6px;
+  overflow: auto; max-height: 160px;
+  scrollbar-width: thin; scrollbar-color: var(--border2) transparent;
+}
+.tbl-wrap table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 10px; }
+.tbl-wrap th {
+  background: var(--bg); color: var(--text-dim);
+  padding: 4px 7px; text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap; position: sticky; top: 0;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.tbl-wrap td {
+  padding: 3px 7px; border-bottom: 1px solid var(--border);
+  color: var(--text); white-space: nowrap;
+  max-width: 110px; overflow: hidden; text-overflow: ellipsis;
+}
+.tbl-wrap tr:last-child td { border-bottom: none; }
+.tbl-wrap tr:hover td { background: rgba(255,255,255,.02); }
+.tbl-more { font-family: var(--mono); font-size: 9px; color: var(--text-dim); padding: 5px 9px; }
+
+.typing .bubble { padding: 12px 16px !important; display: flex; gap: 5px; align-items: center; }
+.tdot { width: 5px; height: 5px; border-radius: 50%; background: var(--text-dim); animation: bounce 1.2s ease-in-out infinite; }
+.tdot:nth-child(2){animation-delay:.2s}
+.tdot:nth-child(3){animation-delay:.4s}
+@keyframes bounce { 0%,80%,100%{transform:translateY(0);opacity:.4} 40%{transform:translateY(-5px);opacity:1} }
+
+.chat-ft { padding: 13px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.input-row { display: flex; gap: 7px; align-items: flex-end; }
+#qinput {
+  flex: 1; background: var(--bg3); border: 1px solid var(--border2);
+  border-radius: 7px; padding: 9px 12px;
+  font-size: 12px; font-family: var(--sans); color: var(--text-hi);
+  resize: none; min-height: 38px; max-height: 110px;
+  outline: none; line-height: 1.5; transition: border-color .15s;
+}
+#qinput:focus { border-color: var(--accent); }
+#qinput::placeholder { color: var(--text-dim); }
+.send {
+  width: 38px; height: 38px; background: var(--accent);
+  border: none; border-radius: 7px; color: #fff;
+  font-size: 16px; cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+}
+.send:hover { background: #5590ff; }
+.send:disabled { background: var(--border2); cursor: not-allowed; }
+
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><div class="pip"></div>SAP O2C // GRAPH INTELLIGENCE</div>
+  <div class="stats">
+    <div class="stat"><div class="stat-n" id="sn-so">—</div><div class="stat-l">Sales Orders</div></div>
+    <div class="stat"><div class="stat-n" id="sn-del">—</div><div class="stat-l">Deliveries</div></div>
+    <div class="stat"><div class="stat-n" id="sn-bill">—</div><div class="stat-l">Billing Docs</div></div>
+    <div class="stat"><div class="stat-n" id="sn-pay">—</div><div class="stat-l">Payments</div></div>
+    <div class="stat"><div class="stat-n" id="sn-cust">—</div><div class="stat-l">Customers</div></div>
+    <div class="stat"><div class="stat-n" id="sn-prod">—</div><div class="stat-l">Products</div></div>
+  </div>
+</header>
+
+<div class="workspace">
+  <div class="graph-wrap">
+    <div id="cy"></div>
+
+    <div class="graph-ctrl">
+      <button class="cbtn" title="Fit all" onclick="fitAll()">⊡</button>
+      <button class="cbtn" title="Zoom in" onclick="zoomIn()">+</button>
+      <button class="cbtn" title="Zoom out" onclick="zoomOut()">−</button>
+      <button class="cbtn" title="Clear highlights" onclick="resetHL()">◎</button>
+    </div>
+
+    <div class="legend">
+      <div class="leg-hd">Node Types</div>
+      <div class="leg-row"><div class="ldot" style="background:var(--nc-cust)"></div>Customer</div>
+      <div class="leg-row"><div class="ldot" style="background:var(--nc-so)"></div>Sales Order</div>
+      <div class="leg-row"><div class="ldot" style="background:var(--nc-del)"></div>Delivery</div>
+      <div class="leg-row"><div class="ldot" style="background:var(--nc-bill)"></div>Billing Doc</div>
+      <div class="leg-row"><div class="ldot" style="background:var(--nc-pay)"></div>Payment</div>
+      <div class="leg-row"><div class="ldot" style="background:var(--nc-prod)"></div>Product</div>
+      <div class="leg-row"><div class="ldot" style="background:var(--nc-je)"></div>Journal Entry</div>
+    </div>
+
+    <div class="node-info" id="node-info">
+      <button class="ni-x" onclick="closeInfo()">×</button>
+      <div class="ni-type" id="ni-type"></div>
+      <div class="ni-name" id="ni-name"></div>
+      <div id="ni-rows"></div>
+    </div>
+  </div>
+
+  <div class="chat-panel">
+    <div class="chat-hd">
+      <div class="chat-hd-t">Query Interface</div>
+      <div class="chat-hd-s">Natural language over the O2C dataset</div>
+    </div>
+
+    <div class="chips">
+      <div class="chip" onclick="ask(this)">Top billed products</div>
+      <div class="chip" onclick="ask(this)">Trace billing doc 90504253</div>
+      <div class="chip" onclick="ask(this)">Trace SO 740556</div>
+      <div class="chip" onclick="ask(this)">Orders not yet delivered</div>
+      <div class="chip" onclick="ask(this)">Deliveries not billed</div>
+      <div class="chip" onclick="ask(this)">Unpaid billing docs</div>
+      <div class="chip" onclick="ask(this)">Top customers by order value</div>
+      <div class="chip" onclick="ask(this)">Cancelled billing documents</div>
+      <div class="chip" onclick="ask(this)">Revenue by product</div>
+    </div>
+
+    <div class="msgs" id="msgs">
+      <div class="msg bot">
+        <div class="msg-role">System</div>
+        <div class="bubble">
+          Welcome to the SAP O2C Graph Intelligence system.<br><br>
+          Ask me about <strong>sales orders</strong>, <strong>deliveries</strong>,
+          <strong>billing documents</strong>, <strong>payments</strong>,
+          <strong>customers</strong>, <strong>products</strong>, or <strong>journal entries</strong>.<br><br>
+          Click any node in the graph to inspect it, or type a question below.
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-ft">
+      <div class="input-row">
+        <textarea id="qinput" placeholder="Ask about orders, billing, payments…"
+          rows="1" onkeydown="onKey(event)" oninput="grow(this)"></textarea>
+        <button class="send" id="sbtn" onclick="send()">↑</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+
+const COLOR = {
+  customer: '#3b78ff',
+  business_partner: '#3b78ff',
+  sales_order: '#9b5fff',
+  order: '#9b5fff',
+  delivery: '#00c896',
+  billing: '#ff6830',
+  billing_doc: '#ff6830',
+  payment: '#ffb020',
+  product: '#19c2ff',
+  journal_entry: '#ff5c7a'
+};
+
+const NODE_TYPE_MAP = {
+  BP: 'customer',
+  CUST: 'customer',
+  SO: 'sales_order',
+  DEL: 'delivery',
+  BILL: 'billing',
+  PAY: 'payment',
+  PRD: 'product',
+  JE: 'journal_entry'
+};
+
+let cy = null;
+let busy = false;
+
+function safeArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function fitAll() {
+  if (cy) cy.fit(cy.elements(), 30);
+}
+
+function zoomIn() {
+  if (!cy) return;
+  cy.zoom({
+    level: cy.zoom() * 1.25,
+    renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 }
+  });
+}
+
+function zoomOut() {
+  if (!cy) return;
+  cy.zoom({
+    level: cy.zoom() * 0.8,
+    renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 }
+  });
+}
+
+function inferTypeFromId(id) {
+  if (!id || typeof id !== 'string') return 'unknown';
+  const prefix = id.split('_')[0];
+  return NODE_TYPE_MAP[prefix] || 'unknown';
+}
+
+function normalizeNode(node) {
+  const n = node || {};
+  const rawData = n.data && typeof n.data === 'object' ? n.data : {};
+  const id = n.id || rawData.id || '';
+  const type = n.type || n.node_type || rawData.type || rawData.node_type || inferTypeFromId(id);
+  const label = n.label || n.name || rawData.label || rawData.name || id;
+
+  return {
+    id,
+    label,
+    type,
+    meta: { ...rawData, ...n }
+  };
+}
+
+function normalizeEdge(edge, index) {
+  const e = edge || {};
+  const rawData = e.data && typeof e.data === 'object' ? e.data : {};
+  const source = e.source || rawData.source || '';
+  const target = e.target || rawData.target || '';
+  const label = e.label || e.relationship || rawData.label || rawData.relationship || '';
+
+  return {
+    id: e.id || rawData.id || `e_${index}`,
+    source,
+    target,
+    label
+  };
+}
+
+function buildGraph(data) {
+  const nodes = safeArray(data && data.nodes);
+  const edges = safeArray((data && data.edges) || (data && data.links));
+
+  const elems = [];
+
+  nodes.forEach((node) => {
+    const n = normalizeNode(node);
+    if (!n.id) return;
+
+    elems.push({
+      data: {
+        id: n.id,
+        label: n.label,
+        type: n.type,
+        meta: n.meta,
+        color: COLOR[n.type] || '#888'
+      }
+    });
+  });
+
+  edges.forEach((edge, index) => {
+    const e = normalizeEdge(edge, index);
+    if (!e.source || !e.target) return;
+
+    elems.push({
+      data: {
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        label: e.label
+      }
+    });
+  });
+
+  if (cy) {
+    cy.destroy();
+    cy = null;
+  }
+
+  cy = cytoscape({
+    container: document.getElementById('cy'),
+    elements: elems,
+    style: [
+      {
+        selector: 'node',
+        style: {
+          'background-color': 'data(color)',
+          'border-width': 2,
+          'border-color': 'data(color)',
+          'border-opacity': .5,
+          'label': 'data(label)',
+          'color': '#b8c8e0',
+          'font-size': 8,
+          'font-family': 'Space Mono, monospace',
+          'text-valign': 'bottom',
+          'text-margin-y': 4,
+          'width': 26,
+          'height': 26,
+          'text-outline-width': 2,
+          'text-outline-color': '#090b10'
+        }
+      },
+      {
+        selector: 'node[type="customer"], node[type="business_partner"]',
+        style: {
+          'width': 34,
+          'height': 34,
+          'shape': 'hexagon'
+        }
+      },
+      {
+        selector: 'node[type="product"]',
+        style: {
+          'shape': 'diamond',
+          'width': 28,
+          'height': 28
+        }
+      },
+      {
+        selector: 'node[type="journal_entry"]',
+        style: {
+          'shape': 'round-rectangle',
+          'width': 30,
+          'height': 24
+        }
+      },
+      {
+        selector: 'edge',
+        style: {
+          'width': 1.2,
+          'line-color': '#1c2333',
+          'target-arrow-color': '#263045',
+          'target-arrow-shape': 'triangle',
+          'curve-style': 'bezier',
+          'arrow-scale': .7,
+          'label': 'data(label)',
+          'font-size': 7,
+          'font-family': 'Space Mono, monospace',
+          'color': '#2e3e5a',
+          'text-rotation': 'autorotate',
+          'text-margin-y': -5
+        }
+      },
+      {
+        selector: 'node.hl',
+        style: {
+          'border-width': 4,
+          'border-color': '#ffffff',
+          'border-opacity': 1,
+          'width': 42,
+          'height': 42
+        }
+      },
+      {
+        selector: 'node[type="journal_entry"].hl',
+        style: {
+          'width': 46,
+          'height': 30
+        }
+      },
+      {
+        selector: 'node[type="product"].hl',
+        style: {
+          'width': 44,
+          'height': 44
+        }
+      },
+      {
+        selector: 'edge.hl',
+        style: {
+          'line-color': '#ffffff',
+          'target-arrow-color': '#ffffff',
+          'width': 2.5,
+          'opacity': 1
+        }
+      },
+      {
+        selector: 'node.dim',
+        style: { 'opacity': .18 }
+      },
+      {
+        selector: 'edge.dim',
+        style: { 'opacity': .05 }
+      }
+    ],
+    layout: {
+      name: 'cose',
+      animate: true,
+      animationDuration: 700,
+      nodeOverlap: 20,
+      idealEdgeLength: 90,
+      nodeRepulsion: 8000,
+      gravity: .25,
+      numIter: 1000
+    },
+    minZoom: .15,
+    maxZoom: 3
+  });
+
+  cy.on('tap', 'node', async (e) => {
+    await showInfo(e.target.data());
+  });
+
+  cy.on('tap', (e) => {
+    if (e.target === cy) closeInfo();
+  });
+}
+
+async function fetchJson(url, options = {}) {
+  const res = await fetch(url, options);
+  const contentType = res.headers.get('content-type') || '';
+  const data = contentType.includes('application/json') ? await res.json() : null;
+
+  if (!res.ok) {
+    const msg = data && (data.detail || data.error) ? (data.detail || data.error) : `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+
+  return data;
+}
+
+function buildInfoRows(obj) {
+  const skip = new Set(['id', 'label', 'type', 'node_type', 'name', 'meta', 'data', 'color']);
+  const pairs = Object.entries(obj || {})
+    .filter(([k, v]) => !skip.has(k) && v !== null && v !== 'None' && v !== '')
+    .slice(0, 14);
+
+  return pairs.map(([k, v]) =>
+    `<div class="ni-row"><span class="ni-k">${camel(k)}</span><span class="ni-v">${esc(String(v))}</span></div>`
+  ).join('');
+}
+
+async function showInfo(d) {
+  const type = (d.type || inferTypeFromId(d.id) || '').toLowerCase();
+  const nodeId = d.id || '';
+  const backendId = nodeId.includes('_') ? nodeId.split('_').slice(1).join('_') : nodeId;
+
+  document.getElementById('ni-type').textContent = type.replaceAll('_', ' ').toUpperCase();
+  document.getElementById('ni-name').textContent = d.label || nodeId;
+
+  let html = '';
+
+  try {
+    if (type && backendId) {
+      const detail = await fetchJson(`${API}/api/node/${encodeURIComponent(type)}/${encodeURIComponent(backendId)}`);
+      html = buildInfoRows(detail);
+    }
+  } catch (e) {
+    html = '';
+  }
+
+  if (!html) {
+    html = buildInfoRows(d.meta || d);
+  }
+
+  if (!html) {
+    html = `<div class="ni-row"><span class="ni-k">info</span><span class="ni-v">No additional details</span></div>`;
+  }
+
+  document.getElementById('ni-rows').innerHTML = html;
+  document.getElementById('node-info').classList.add('show');
+}
+
+function closeInfo() {
+  document.getElementById('node-info').classList.remove('show');
+}
+
+function camel(s) {
+  return String(s).replace(/([A-Z])/g, ' $1').replaceAll('_', ' ').toLowerCase().trim();
+}
+
+function highlight(ids) {
+  if (!cy || !Array.isArray(ids) || !ids.length) return;
+
+  const valid = ids.filter(id => cy.getElementById(id).length > 0);
+  if (!valid.length) return;
+
+  cy.elements().addClass('dim');
+
+  valid.forEach(id => {
+    const n = cy.getElementById(id);
+    n.removeClass('dim').addClass('hl');
+
+    const edges = n.connectedEdges();
+    const neighbors = n.closedNeighborhood();
+
+    edges.removeClass('dim').addClass('hl');
+    neighbors.removeClass('dim');
+  });
+
+  const highlighted = cy.$('.hl');
+  if (highlighted.length) {
+    cy.animate({ fit: { eles: highlighted, padding: 40 } }, { duration: 400 });
+  }
+}
+
+function resetHL() {
+  if (!cy) return;
+  cy.nodes().removeClass('hl dim');
+  cy.edges().removeClass('hl dim');
+}
+
+async function loadStats() {
+  try {
+    const s = await fetchJson(`${API}/api/stats`);
+    document.getElementById('sn-so').textContent = s.sales_orders ?? '—';
+    document.getElementById('sn-del').textContent = s.deliveries ?? '—';
+    document.getElementById('sn-bill').textContent = s.billing_docs ?? '—';
+    document.getElementById('sn-pay').textContent = s.payments ?? '—';
+    document.getElementById('sn-cust').textContent = s.customers ?? '—';
+    document.getElementById('sn-prod').textContent = s.products ?? '—';
+  } catch (e) {
+    console.warn('stats', e);
+  }
+}
+
+function grow(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 110) + 'px';
+}
+
+function onKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    send();
+  }
+}
+
+function ask(el) {
+  document.getElementById('qinput').value = el.textContent.trim();
+  send();
+}
+
+async function send() {
+  const el = document.getElementById('qinput');
+  const text = el.value.trim();
+  if (!text || busy) return;
+
+  busy = true;
+  document.getElementById('sbtn').disabled = true;
+  el.value = '';
+  el.style.height = 'auto';
+
+  addMsg('user', text);
+  const tid = addTyping();
+
+  try {
+    const data = await fetchJson(`${API}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text })
+    });
+
+    rmTyping(tid);
+    addBotMsg(data);
+
+    resetHL();
+    if (Array.isArray(data.highlight_ids) && data.highlight_ids.length) {
+      highlight(data.highlight_ids);
+    }
+  } catch (e) {
+    rmTyping(tid);
+    addMsg('bot', `Connection error: ${e.message}`, true);
+  }
+
+  busy = false;
+  document.getElementById('sbtn').disabled = false;
+  el.focus();
+}
+
+function addMsg(role, text, err = false) {
+  const box = document.getElementById('msgs');
+  const d = document.createElement('div');
+  d.className = `msg ${role}${err ? ' err' : ''}`;
+  d.innerHTML = `<div class="msg-role">${role === 'user' ? 'You' : 'Assistant'}</div>
+                 <div class="bubble">${esc(text)}</div>`;
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+}
+
+function addBotMsg(data) {
+  const box = document.getElementById('msgs');
+  const d = document.createElement('div');
+  d.className = 'msg bot';
+
+  let html = `<div class="msg-role">Assistant</div><div class="bubble"><div>${esc(data.answer || 'No answer returned.')}</div>`;
+
+  if (data.sql) {
+    html += `<div class="sql-wrap">
+      <div class="sql-hd"><span>Generated SQL</span>
+        <button class="sql-copy" onclick="copySql(this)">copy</button></div>
+      <div class="sql-body">${esc(data.sql)}</div>
+    </div>`;
+  }
+
+  if (Array.isArray(data.rows) && data.rows.length) {
+    const cols = Object.keys(data.rows[0]).slice(0, 6);
+    const display = data.rows.slice(0, 20);
+
+    html += `<div class="tbl-wrap"><table>
+      <thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead>
+      <tbody>${display.map(r =>
+        `<tr>${cols.map(c =>
+          `<td title="${esc(String(r[c] ?? ''))}">${esc(String(r[c] ?? '—'))}</td>`
+        ).join('')}</tr>`
+      ).join('')}</tbody>
+    </table></div>`;
+
+    if (data.rows.length > 20) {
+      html += `<div class="tbl-more">Showing 20 of ${data.rows.length} rows</div>`;
+    }
+  }
+
+  html += '</div>';
+  d.innerHTML = html;
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+}
+
+function addTyping() {
+  const box = document.getElementById('msgs');
+  const id = 'ty_' + Date.now();
+  const d = document.createElement('div');
+  d.className = 'msg bot typing';
+  d.id = id;
+  d.innerHTML = `<div class="msg-role">Assistant</div>
+    <div class="bubble"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div>`;
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+  return id;
+}
+
+function rmTyping(id) {
+  const el = document.getElementById(id);
+  if (el) el.remove();
+}
+
+function copySql(btn) {
+  const code = btn.closest('.sql-wrap').querySelector('.sql-body').textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    btn.textContent = 'copied!';
+    setTimeout(() => { btn.textContent = 'copy'; }, 1500);
+  }).catch(() => {
+    btn.textContent = 'failed';
+    setTimeout(() => { btn.textContent = 'copy'; }, 1500);
+  });
+}
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/\n/g, '<br>');
+}
+
+async function boot() {
+  await loadStats();
+  try {
+    const data = await fetchJson(`${API}/api/graph`);
+    buildGraph(data);
+  } catch (e) {
+    document.getElementById('cy').innerHTML =
+      `<div style="color:var(--text-dim);padding:40px;font-family:var(--mono);font-size:11px;line-height:1.9">
+        ⚠ Could not load graph data.<br>
+        Make sure the backend is running:<br><br>
+        <span style="color:var(--green)">cd backend<br>python -m uvicorn main:app --reload --port 8000</span><br><br>
+        ${esc(e.message)}
+      </div>`;
+  }
+}
+
+boot();
+</script>
+</body>
+</html>
