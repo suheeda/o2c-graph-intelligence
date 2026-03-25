@@ -12,12 +12,30 @@ DB_PATH = os.path.join(BACKEND_DIR, "db.sqlite")
 DATASET_DIR = os.path.join(BACKEND_DIR, "data", "dataset")
 
 
-def get_conn() -> sqlite3.Connection:
+def ensure_db():
+    """
+    Auto-create db.sqlite from the dataset if it doesn't exist yet.
+    Works on Render and locally.
+    """
+    if os.path.exists(DB_PATH):
+        return
+
+    if not os.path.isdir(DATASET_DIR):
+        raise FileNotFoundError(
+            f"Dataset not found: {DATASET_DIR}"
+        )
+
+    from ingest import ingest
+    ingest()
+
     if not os.path.exists(DB_PATH):
         raise FileNotFoundError(
-            f"Database not found: {DB_PATH}. "
-            f"Make sure ingest.py has created db.sqlite from {DATASET_DIR}"
+            f"Database not created: {DB_PATH}"
         )
+
+
+def get_conn() -> sqlite3.Connection:
+    ensure_db()
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
