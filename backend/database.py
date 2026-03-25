@@ -2,37 +2,6 @@
 database.py
 -----------
 SQLite access layer + graph-data builder.
-
-VERIFIED JOIN MAP (confirmed against real dataset):
-────────────────────────────────────────────────────
-sales_order_headers.salesOrder
-    = sales_order_items.salesOrder
-    = delivery_items.referenceSdDocument
-    = sales_order_schedule_lines.salesOrder
-
-delivery_items.deliveryDocument
-    = delivery_headers.deliveryDocument
-    = billing_items.referenceSdDocument
-
-billing_items.billingDocument
-    = billing_headers.billingDocument
-
-billing_headers.accountingDocument
-    = journal_entries.accountingDocument
-    = payments.accountingDocument
-
-billing_headers.billingDocument
-    = journal_entries.referenceDocument
-
-business_partners.businessPartner
-    = sales_order_headers.soldToParty
-    = billing_headers.soldToParty
-    = payments.customer
-    = journal_entries.customer
-
-sales_order_items.material  =  products.product  =  product_descriptions.product
-billing_items.material      =  products.product  =  product_descriptions.product
-delivery_items.plant        =  plants.plant
 """
 
 import os
@@ -40,26 +9,21 @@ import sqlite3
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BACKEND_DIR, "db.sqlite")
+DATASET_DIR = os.path.join(BACKEND_DIR, "data", "dataset")
 
 
-# ── Connection ────────────────────────────────────────────────────────────────
 def get_conn() -> sqlite3.Connection:
     if not os.path.exists(DB_PATH):
         raise FileNotFoundError(
-            f"Database not found: {DB_PATH}\n"
-            "Run: python backend/ingest.py"
+            f"Database not found: {DB_PATH}. "
+            f"Make sure ingest.py has created db.sqlite from {DATASET_DIR}"
         )
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
-# ── Schema string for LLM ────────────────────────────────────────────────────
 def get_schema_for_llm() -> str:
-    """
-    Returns every table + column in O2C flow order.
-    Used verbatim inside the LLM system prompt.
-    """
     conn = get_conn()
     try:
         existing = {
@@ -106,9 +70,7 @@ def get_schema_for_llm() -> str:
         conn.close()
 
 
-# ── Generic query runner ──────────────────────────────────────────────────────
 def run_query(sql: str, params=()) -> list[dict]:
-    """Execute any SELECT and return a list of dicts. Raises on error."""
     conn = get_conn()
     try:
         cur = conn.execute(sql, params)
@@ -117,17 +79,7 @@ def run_query(sql: str, params=()) -> list[dict]:
         conn.close()
 
 
-# ── Graph data ────────────────────────────────────────────────────────────────
 def get_graph_data() -> dict:
-    """
-    Build the node + edge graph for the Cytoscape.js frontend.
-
-    Node types:
-      customer, sales_order, delivery, billing, payment, product, journal_entry
-
-    Edge labels:
-      placed, delivered_by, billed_as, settled_by, contains, posted_to
-    """
     conn = get_conn()
 
     try:
@@ -160,9 +112,6 @@ def get_graph_data() -> dict:
                 "label": label,
             })
 
-        # ------------------------------------------------------------------
-        # 1. Customers
-        # ------------------------------------------------------------------
         for row in conn.execute("""
             SELECT businessPartner, businessPartnerFullName
             FROM business_partners
@@ -170,20 +119,13 @@ def get_graph_data() -> dict:
         """).fetchall():
             bp = row["businessPartner"]
             name = row["businessPartnerFullName"] or bp
-
             add_node(
                 f"BP_{bp}",
                 name,
                 "customer",
-                {
-                    "businessPartner": bp,
-                    "name": name,
-                },
+                {"businessPartner": bp, "name": name},
             )
 
-        # ------------------------------------------------------------------
-        # 2. Sales Orders
-        # ------------------------------------------------------------------
         for row in conn.execute("""
             SELECT salesOrder,
                    soldToParty,
@@ -213,9 +155,6 @@ def get_graph_data() -> dict:
 
             add_edge(f"BP_{party}", f"SO_{so}", "placed")
 
-        # ------------------------------------------------------------------
-        # 3. Deliveries
-        # ------------------------------------------------------------------
         for row in conn.execute("""
             SELECT DISTINCT
                    di.deliveryDocument,
@@ -244,9 +183,6 @@ def get_graph_data() -> dict:
 
             add_edge(f"SO_{sales_order_ref}", f"DEL_{delivery_id}", "delivered_by")
 
-        # ------------------------------------------------------------------
-        # 4. Billing Documents
-        # ------------------------------------------------------------------
         for row in conn.execute("""
             SELECT DISTINCT
                    bh.billingDocument,
@@ -281,9 +217,6 @@ def get_graph_data() -> dict:
 
             add_edge(f"DEL_{delivery_ref}", f"BILL_{billing_id}", "billed_as")
 
-        # ------------------------------------------------------------------
-        # 5. Payments
-        # ------------------------------------------------------------------
         billing_by_acc = {}
         for row in conn.execute("""
             SELECT billingDocument, accountingDocument
@@ -324,9 +257,6 @@ def get_graph_data() -> dict:
             if billing_doc:
                 add_edge(f"BILL_{billing_doc}", f"PAY_{acc}", "settled_by")
 
-        # ------------------------------------------------------------------
-        # 6. Products
-        # ------------------------------------------------------------------
         for row in conn.execute("""
             SELECT DISTINCT
                    soi.material,
@@ -354,9 +284,6 @@ def get_graph_data() -> dict:
 
             add_edge(f"SO_{sales_order}", f"PRD_{product_id}", "contains")
 
-        # ------------------------------------------------------------------
-        # 7. Journal Entries
-        # ------------------------------------------------------------------
         for row in conn.execute("""
             SELECT DISTINCT
                    je.accountingDocument,
@@ -383,28 +310,19 @@ def get_graph_data() -> dict:
             if billing_ref:
                 add_edge(f"BILL_{billing_ref}", f"JE_{je_id}", "posted_to")
 
-        # ------------------------------------------------------------------
-        # Final edge cleanup
-        # ------------------------------------------------------------------
         valid_ids = {n["id"] for n in nodes}
         clean_edges = [
-            edge
-            for edge in edges
+            edge for edge in edges
             if edge["source"] in valid_ids and edge["target"] in valid_ids
         ]
 
-        return {
-            "nodes": nodes,
-            "edges": clean_edges,
-        }
+        return {"nodes": nodes, "edges": clean_edges}
 
     finally:
         conn.close()
 
 
-# ── Node detail ───────────────────────────────────────────────────────────────
 def get_node_detail(node_type: str, node_id: str) -> dict | None:
-    """Return the full DB row for a clicked graph node."""
     mapping = {
         "customer": ("business_partners", "businessPartner"),
         "sales_order": ("sales_order_headers", "salesOrder"),
