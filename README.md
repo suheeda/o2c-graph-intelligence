@@ -94,7 +94,7 @@ set GEMINI_API_KEY=your_key_here
 $env:GEMINI_API_KEY="your_key_here"
 ```
 
-⚠️ Add your Gemini API key inside backend/llm.py:
+Note: Ensure the GEMINI_API_KEY environment variable is set before running the application.
 
 ### 6 — Start the backend
 
@@ -208,6 +208,41 @@ sales_order_headers.salesOrder
 | Unpaid billing docs | LEFT JOIN payments, WHERE NULL, not cancelled |
 | Top customers by order value | GROUP BY soldToParty, SUM totalNetAmount |
 | Cancelled billing documents | WHERE billingDocumentIsCancelled = 'True' |
+
+---
+
+LLM Architecture  
+
+Two-stage pipeline  
+
+NL → SQL → SQLite → Answer  
+
+Guardrails (two layers)  
+
+Keyword filter and LLM-based validation to ensure queries stay within dataset scope  
+
+---
+
+Project Structure Note  
+
+backend/ → FastAPI, ingestion, database, LLM  
+frontend/ → UI  
+
+Equivalent to a typical /src structure  
+
+---
+
+AI Usage  
+
+AI tools (ChatGPT, Claude, Cloud AI) were used for design, debugging, and prompt refinement.  
+All outputs were validated against real dataset.  
+
+---
+
+Deployment Note  
+
+Hosted on Render (free tier).  
+Cold start may cause slight delay on first load.  
 
 ---
 
