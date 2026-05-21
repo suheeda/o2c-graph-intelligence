@@ -103,7 +103,7 @@ RULES:
 
 
 async def _gemini(system_prompt: str | None, user_text: str, temperature: float = 0.1) -> str:
-    if not GEMINI_API_KEY or GEMINI_API_KEY == "PASTE_YOUR_REAL_GEMINI_KEY_HERE":
+    if not GEMINI_API_KEY or GEMINI_API_KEY == "AIzaSyB5BG7ufKLQeWJ_KSCLewIH4amcYJqF03s":
         raise ValueError("GEMINI_API_KEY is missing or still placeholder text.")
 
     payload = {
